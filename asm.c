@@ -138,6 +138,8 @@ on_alu4(inst *ins, int tag)
          atoi(operands[3]), tag);
 }
 
+
+
 unsigned
 calc_disp(int pc, int op, char *oprnd)
 {
@@ -191,6 +193,15 @@ on_misc3(inst *ins, int op, int prd, int dmode, int dop)
   return code_m(op, operands[0], operands[1], prd, disp, dmode);
 }
 
+unsigned
+on_jr(inst *ins)
+{
+  char operands[2][20];
+  get_token(operands[0], &ins->buf);
+  get_token(operands[1], &ins->buf);
+  return code_m(5, operands[0], operands[1], 3, 0, 0);
+}
+
 int
 disp_mode(char *token)
 {
@@ -238,18 +249,17 @@ code(inst *ins)
   dmode = disp_mode(token);
   prd    = pred(token);
   dop = disp_op(token);
-
   if (strcmp(token, "halt") == 0) {
     // only allow halt macro
     return 0xffffffff;
   } else if ((opcode = find_alu4(token)) >= 0) {
     return on_alu4(ins, opcode);
-  } else if ((opcode = find_misc1(token)) >= 0) {
-    return on_misc1(ins, opcode, prd, dmode);
   } else if ((opcode = find_misc2(token)) >= 0) {
     return on_misc2(ins, opcode, prd, dmode, dop);
   } else if ((opcode = find_misc3(token)) >= 0) {
     return on_misc3(ins, opcode, prd, dmode, dop);
+  } else if (strcmp(token, "jr") == 0) {
+    return on_jr(ins);
   } else {
     D("TODO : %s\n", token);
     return -1;
@@ -290,12 +300,16 @@ emit_insts(FILE *fp)
 {
   int i;
   int len = vec_lengh(g_lines);
+  unsigned fsize = len * 4;
+
+  fwrite(&fsize, sizeof(unsigned), 1, fp);
+
   for(i = 0; i < len; ++i) {
     inst *ins = vec_get(g_lines, i);
     unsigned b = code(ins);
-    //fwrite(&b, sizeof(b), 1, fp);
-    fprintf(fp, "[0x%06x] %08x\n", ins->pc, b);
+    fwrite(&b, sizeof(b), 1, fp);
   }
+
 }
 
 void
@@ -308,7 +322,7 @@ br_main()
   read_buffer(&buf);
 
   buf.cur = 0;
-  strcpy(buf.str, "jr r29");
+  strcpy(buf.str, "jr r29, r29");
   read_buffer(&buf);
 }
 
