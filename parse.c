@@ -45,6 +45,15 @@ regnum(char *r)
     fprintf(stderr, "%s is not register\n", r);
     return -1;
   }
+
+  if (strcmp(r, "rsp") == 0) {
+    return 30;
+  }
+
+  if (strcmp(r, "rbp") == 0) {
+    return 31;
+  }
+
   return atoi(r + 1);
 }
 
