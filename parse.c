@@ -39,6 +39,29 @@ get_token(char *token, buffer *buf)
 }
 
 int
+get_line(char *token, buffer *buf)
+{
+  int i;
+  char *s = buf->str;
+  int n = strlen(buf->str);
+  skip_space_and_comma(buf);
+  i = buf->cur;
+
+  if (i >= n) return -1;
+
+  while (i < n &&
+         s[i] != '\n') {
+    ++i;
+  }
+  strncpy(token, &s[buf->cur], i - buf->cur);
+  token[i - buf->cur]='\0';
+  buf->cur = i;
+  return 1;
+}
+
+
+
+int
 regnum(char *r)
 {
   if(r[0] != 'r') {
@@ -62,7 +85,6 @@ read_hex(char *hx)
 {
   int i;
   unsigned r = 0;
-
   assert(hx[0] == '0' &&
          (hx[1] == 'x' || hx[1] == 'X'));
   i = 2;
@@ -91,6 +113,15 @@ read_hex(char *hx)
 
   return r;
 
+}
+
+
+unsigned
+read_num(char *num)
+{
+  if (num[0] == '0' && (num[1] == 'x' || num[1] == 'X'))
+    return read_hex(num);
+  return atoi(num);
 }
 
 void

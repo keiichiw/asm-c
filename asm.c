@@ -19,6 +19,7 @@
 typedef struct {
   int   pc;
   buffer buf;
+  int   pseudo;
 } inst;
 
 typedef struct {
@@ -40,6 +41,7 @@ void
 push_label(char *str, int addr)
 {
   label *l = malloc(sizeof(label));
+  D("label %s\n", str);
   l->lbl = malloc(strlen(str));
   strcpy(l->lbl, str);
   l->addr = addr;
@@ -59,6 +61,14 @@ assoc_label(char *str)
     }
   }
   ERR("label %s not found\n", str);
+}
+
+
+void set_inst(inst *ins, int pc, buffer *buf, int pseudo)
+{
+  ins->pc  = pc;
+  ins->buf = *buf;
+  ins->pseudo = pseudo;
 }
 
 void
@@ -147,8 +157,7 @@ calc_disp(int pc, int op, char *oprnd)
   int addr;
 
   if (oprnd[0] == '0') {
-    addr = read_hex(oprnd);
-    //D("%s: 0x%06x\n", oprnd, addr);
+    addr = read_num(oprnd);
   } else {
     addr = assoc_label(oprnd);
   }
@@ -218,12 +227,6 @@ disp_mode(char *token)
 int
 pred(char *token)
 {
-  if (strcmp(token, "jl") == 0 ||
-      strcmp(token, "jr") == 0 ||
-      strcmp(token, "bne+") == 0 ||
-      strcmp(token, "beq+") == 0) {
-    return 3;
-  }
   return 0;
 }
 
@@ -267,6 +270,8 @@ code(inst *ins)
 
 }
 
+
+
 void
 read_buffer(buffer *buf)
 {
@@ -277,6 +282,29 @@ read_buffer(buffer *buf)
     // blank line
 
   } else if (buf->str[0] == '.') {
+    char d[10];
+    get_token(d, buf);
+
+    if (strcmp(d, ".global") == 0) {
+      // ignore
+    } else if (strcmp(d, ".string") == 0) {
+      inst ins;
+      int len = strlen(buf->str) - 9;
+      set_inst(&ins, ln, buf, 1);
+      push_inst(&ins);
+      ln += len;
+    } else if (strcmp(d, ".align") == 0) {
+      char num[5];
+      int n;
+      get_token(num, buf);
+      n = atoi(buf->str + buf->cur - 1);
+      D("n=%d\n", n);
+      D("%s\n", buf->str + buf->cur -1);
+      ln = ((ln + (n-1)) / n) * n;
+    } else {
+      D("unknown directive: %s\n", d);
+    }
+
     // directive
     // ignore
     // TODO: global variables
@@ -288,11 +316,23 @@ read_buffer(buffer *buf)
 
   } else {
     inst ins;
-    ins.pc = ln;
-    ins.buf = *buf;
-    ln += 4;
+    set_inst(&ins, ln, buf, 0);
     push_inst(&ins);
+    ln += 4;
   }
+}
+
+void
+on_string(inst *ins, FILE *fp)
+{
+  char str[20];
+  int len;
+  get_line(str, &ins->buf);
+  len = strlen(str);
+  str[len-1]=0;
+  D("string: %s\n", str+1);
+  fwrite(str+1, 1, len-1, fp);
+  return;
 }
 
 void
@@ -301,13 +341,28 @@ emit_insts(FILE *fp)
   int i;
   int len = vec_lengh(g_lines);
   unsigned fsize = len * 4;
+  int pc = 0x2000;
 
   fwrite(&fsize, sizeof(unsigned), 1, fp);
 
   for(i = 0; i < len; ++i) {
     inst *ins = vec_get(g_lines, i);
-    unsigned b = code(ins);
-    fwrite(&b, sizeof(b), 1, fp);
+    if (pc < ins->pc) {
+      int j, n = ins->pc - pc;
+      char z = 0;
+      for(j = 0; j < n; ++j) {
+        fwrite(&z, 1, 1, fp);
+      }
+    }
+    pc = ins->pc;
+    if (ins->pseudo == 1) { // .string
+      D("0x%06x string\n", pc);
+      on_string(ins, fp);
+    } else {
+      unsigned b = code(ins);
+      D("0x%06x [%08x]\n", pc, b);
+      fwrite(&b, sizeof(b), 1, fp);
+    }
   }
 
 }
