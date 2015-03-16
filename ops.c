@@ -19,6 +19,14 @@ static const int alu4_code[] = {
   26, 27
 };
 
+static const char misc0_table[][12] = {
+  "sysenter", "sysexit"
+};
+
+static const int misc0_code[] = {
+  12, 13
+};
+
 static const char misc2_table[][8] = {
   "ldl", "jl"
 };
@@ -33,6 +41,16 @@ static const char misc3_table[][8] = {
 static const int misc3_code[] = {
   3, 6, 7, 8, 9, 14, 15
 };
+
+int find_misc0(char *op) {
+  unsigned i;
+  for(i = 0; i < sizeof(misc0_code)/sizeof(int); ++i) {
+    if(strcmp(op, misc0_table[i]) == 0)
+      return misc0_code[i];
+  }
+  return -1;
+}
+
 
 int find_alu4(char *op) {
   unsigned i;

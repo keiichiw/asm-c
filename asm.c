@@ -22,7 +22,7 @@
   } while(0)
 
 
-#define START_ADDR 0x2000
+#define START_ADDR 0
 
 int g_ln = START_ADDR;
 
@@ -180,6 +180,12 @@ calc_disp(int pc, int op, char *oprnd)
 
 }
 
+unsigned
+on_misc0(inst *ins, int op, int prd, int dmode)
+{
+  return code_m(op, "r0", "r0", prd, 0, dmode);
+}
+
 
 unsigned
 on_misc1(inst *ins, int op, int prd, int dmode)
@@ -267,6 +273,8 @@ code(inst *ins)
     return 0xffffffff;
   } else if ((opcode = find_alu4(token)) >= 0) {
     return on_alu4(ins, opcode);
+  } else if ((opcode = find_misc0(token)) >= 0) {
+    return on_misc0(ins, opcode, prd, dmode);
   } else if ((opcode = find_misc2(token)) >= 0) {
     return on_misc2(ins, opcode, prd, dmode, dop);
   } else if ((opcode = find_misc3(token)) >= 0) {
