@@ -277,43 +277,60 @@ read_buffer(buffer *buf)
 {
   static int ln = 0x2000;
   int len = strlen(buf->str);
+  buffer tbuf = *buf;
+  int oplen;
+  char op[20];
+  get_token(op, &tbuf);
+  oplen = strlen(op);
 
   if (len <= 1) {
     // blank line
-
   } else if (buf->str[0] == '.') {
-    char d[10];
-    get_token(d, buf);
 
-    if (strcmp(d, ".global") == 0) {
+    if (strcmp(op, ".global") == 0) {
       // ignore
-    } else if (strcmp(d, ".string") == 0) {
+    } else if (strcmp(op, ".string") == 0) {
       inst ins;
       int len = strlen(buf->str) - 9;
       set_inst(&ins, ln, buf, 1);
       push_inst(&ins);
       ln += len;
-    } else if (strcmp(d, ".align") == 0) {
+    } else if (strcmp(op, ".align") == 0) {
       char num[5];
       int n;
       get_token(num, buf);
-      n = atoi(buf->str + buf->cur - 1);
+      n = atoi(buf->str + buf->cur);
       D("n=%d\n", n);
-      D("%s\n", buf->str + buf->cur -1);
+      D("[%s]\n", buf->str + buf->cur);
+      D("%s\n", buf->str + buf->cur);
       ln = ((ln + (n-1)) / n) * n;
     } else {
-      D("unknown directive: %s\n", d);
+      D("unknown directive: %s\n", op);
     }
-
-    // directive
-    // ignore
-    // TODO: global variables
 
   } else if (buf->str[len - 1] == ':') {
     // Label
     buf->str[len - 1] = '\0';
     push_label(buf->str, ln);
-
+  } else if (strcmp(op, "write") == 0) { // write macro
+    inst ins;
+    buffer mybf;
+    char regstr[10];
+    int reg;
+    get_token(regstr, &tbuf);
+    reg = regnum(regstr);
+    mybf.cur = 0;
+    strcpy(mybf.str, "ldh r29, r0, 0x8000");
+    set_inst(&ins, ln, &mybf, 0);
+    D("w: %s\n", mybf.str);
+    push_inst(&ins);
+    ln += 4;
+    strcpy(mybf.str, "st rN, r29, 0x1000");
+    mybf.str[4] = '0' + reg;
+    D("w: %s\n", mybf.str);
+    set_inst(&ins, ln, &mybf, 0);
+    push_inst(&ins);
+    ln += 4;
   } else {
     inst ins;
     set_inst(&ins, ln, buf, 0);
@@ -330,7 +347,6 @@ on_string(inst *ins, FILE *fp)
   get_line(str, &ins->buf);
   len = strlen(str);
   str[len-1]=0;
-  D("string: %s\n", str+1);
   fwrite(str+1, 1, len-1, fp);
   return;
 }
