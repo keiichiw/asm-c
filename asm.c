@@ -13,8 +13,18 @@
   exit(1);                                      \
   } while(0)
 
-#define D(...) fprintf(stderr, __VA_ARGS__)
+#define DEBUG 1
 
+#define D(...)                                  \
+  do {                                          \
+  if (DEBUG)                                    \
+    fprintf(stderr, __VA_ARGS__);               \
+  } while(0)
+
+
+#define START_ADDR 0x2000
+
+int g_ln = START_ADDR;
 
 typedef struct {
   int   pc;
@@ -275,13 +285,10 @@ code(inst *ins)
 void
 read_buffer(buffer *buf)
 {
-  static int ln = 0x2000;
   int len = strlen(buf->str);
   buffer tbuf = *buf;
-  int oplen;
   char op[20];
   get_token(op, &tbuf);
-  oplen = strlen(op);
 
   if (len <= 1) {
     // blank line
@@ -292,9 +299,9 @@ read_buffer(buffer *buf)
     } else if (strcmp(op, ".string") == 0) {
       inst ins;
       int len = strlen(buf->str) - 9;
-      set_inst(&ins, ln, buf, 1);
+      set_inst(&ins, g_ln, &tbuf, 1);
       push_inst(&ins);
-      ln += len;
+      g_ln += len;
     } else if (strcmp(op, ".align") == 0) {
       char num[5];
       int n;
@@ -303,7 +310,7 @@ read_buffer(buffer *buf)
       D("n=%d\n", n);
       D("[%s]\n", buf->str + buf->cur);
       D("%s\n", buf->str + buf->cur);
-      ln = ((ln + (n-1)) / n) * n;
+      g_ln = ((g_ln + (n-1)) / n) * n;
     } else {
       D("unknown directive: %s\n", op);
     }
@@ -311,7 +318,7 @@ read_buffer(buffer *buf)
   } else if (buf->str[len - 1] == ':') {
     // Label
     buf->str[len - 1] = '\0';
-    push_label(buf->str, ln);
+    push_label(buf->str, g_ln);
   } else if (strcmp(op, "write") == 0) { // write macro
     inst ins;
     buffer mybf;
@@ -321,34 +328,47 @@ read_buffer(buffer *buf)
     reg = regnum(regstr);
     mybf.cur = 0;
     strcpy(mybf.str, "ldh r29, r0, 0x8000");
-    set_inst(&ins, ln, &mybf, 0);
-    D("w: %s\n", mybf.str);
+    set_inst(&ins, g_ln, &mybf, 0);
     push_inst(&ins);
-    ln += 4;
+    g_ln += 4;
     strcpy(mybf.str, "st rN, r29, 0x1000");
     mybf.str[4] = '0' + reg;
-    D("w: %s\n", mybf.str);
-    set_inst(&ins, ln, &mybf, 0);
+    set_inst(&ins, g_ln, &mybf, 0);
     push_inst(&ins);
-    ln += 4;
+    g_ln += 4;
+  } else if (strcmp(op, "br") == 0) { // br macro
+    inst ins;
+    buffer mybf;
+    char str[30] = "jl r29, ";
+    char lbl[10];
+    int len;
+    get_token(lbl, &tbuf);
+    len = strlen(lbl);
+    memcpy(str + strlen(str), lbl, len);
+    D("%s\n", str);
+    mybf.cur = 0;
+    strcpy(mybf.str, str);
+    set_inst(&ins, g_ln, &mybf, 0);
+    push_inst(&ins);
+    g_ln += 4;
   } else {
     inst ins;
-    set_inst(&ins, ln, buf, 0);
+    set_inst(&ins, g_ln, buf, 0);
     push_inst(&ins);
-    ln += 4;
+    g_ln += 4;
   }
 }
 
-void
+int
 on_string(inst *ins, FILE *fp)
 {
-  char str[20];
+  char str[30];
   int len;
   get_line(str, &ins->buf);
   len = strlen(str);
-  str[len-1]=0;
+  str[len-1]='\0';
   fwrite(str+1, 1, len-1, fp);
-  return;
+  return len - 1;
 }
 
 void
@@ -356,10 +376,10 @@ emit_insts(FILE *fp)
 {
   int i;
   int len = vec_lengh(g_lines);
-  unsigned fsize = len * 4;
-  int pc = 0x2000;
-
-  fwrite(&fsize, sizeof(unsigned), 1, fp);
+  int pc = START_ADDR;
+  int fs = g_ln - pc;
+  D("sz = %d\n", fs);
+  fwrite(&fs, sizeof(unsigned), 1, fp);
 
   for(i = 0; i < len; ++i) {
     inst *ins = vec_get(g_lines, i);
@@ -369,15 +389,17 @@ emit_insts(FILE *fp)
       for(j = 0; j < n; ++j) {
         fwrite(&z, 1, 1, fp);
       }
+      pc += n;
+      D("align: %d\n", n);
     }
-    pc = ins->pc;
     if (ins->pseudo == 1) { // .string
-      D("0x%06x string\n", pc);
-      on_string(ins, fp);
+      D("0x%06x 0x%06x string\n", pc, ins->pc);
+      pc += on_string(ins, fp);
     } else {
       unsigned b = code(ins);
-      D("0x%06x [%08x]\n", pc, b);
+      D("0x%06x 0x%06x [%08x]\n", pc, ins->pc, b);
       fwrite(&b, sizeof(b), 1, fp);
+      pc += 4;
     }
   }
 
